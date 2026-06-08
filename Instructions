@@ -1,0 +1,904 @@
+# Honeywell V200HL ALT Analyzer
+
+## Project Overview
+
+### Purpose
+
+Build a lightweight local-first analytics application that automates analysis of Honeywell V200HL Accelerated Life Test (ALT) logs.
+
+The tool replaces manual decoding of EEPROM data dumps and manual report creation.
+
+Target users:
+
+* Internal engineering interns
+* Test engineers
+* Validation engineers
+
+Deployment target:
+
+* Local machine only
+* No cloud
+* No authentication
+* No database
+* No enterprise features
+
+Primary objective:
+
+Convert raw ALT log files into structured analytics and reports within seconds.
+
+---
+
+# Core Design Principles
+
+## Principle 1: Local First
+
+Everything runs locally.
+
+No external APIs.
+
+No cloud storage.
+
+No internet dependency.
+
+No telemetry.
+
+No account system.
+
+---
+
+## Principle 2: Extremely Lightweight
+
+Preferred stack:
+
+* Python 3.11+
+* Streamlit
+* Pandas
+* Plotly
+* NumPy
+
+Avoid:
+
+* React
+* NextJS
+* FastAPI
+* Django
+* PostgreSQL
+* MongoDB
+* Redis
+* Docker
+
+Unless a future requirement absolutely demands them.
+
+---
+
+## Principle 3: Deterministic Parsing
+
+Never infer protocol structure.
+
+Parser must use explicit byte offsets.
+
+Every decoded field must be traceable back to source bytes.
+
+---
+
+## Principle 4: Separation of Concerns
+
+The project must be separated into:
+
+* Parsing
+* Validation
+* Analysis
+* Visualization
+* Reporting
+
+No module should mix responsibilities.
+
+---
+
+# Known Protocol Structure
+
+## Packet Header
+
+Example:
+
+4F A9 BB 0C
+
+Meaning:
+
+* 4F A9 = Header
+* BB = Command
+* XX = Register/Page
+
+---
+
+## Packet Footer
+
+Example:
+
+CC 0D
+
+Meaning:
+
+End of packet.
+
+---
+
+## ALT Record Size
+
+Each ALT record is:
+
+14 bytes
+
+Structure:
+
+| Bytes | Meaning           |
+| ----- | ----------------- |
+| 0     | EEPROM Validation |
+| 1     | Flash Validation  |
+| 2-5   | Battery Voltage   |
+| 6-9   | Register Index    |
+| 10-13 | Timestamp         |
+
+---
+
+## EEPROM Validation
+
+Expected:
+
+01 = PASS
+
+Failure:
+
+02 = FAIL
+
+---
+
+## Flash Validation
+
+Expected:
+
+01 = PASS
+
+Failure:
+
+02 = FAIL
+
+---
+
+## Battery Voltage
+
+Stored as:
+
+4-byte little-endian integer
+
+Example:
+
+60 0E 00 00
+
+Reverse:
+
+00 00 0E 60
+
+Hex:
+
+0E60
+
+Decimal:
+
+3680
+
+Meaning:
+
+3680 mV
+
+Voltage:
+
+3.680V
+
+---
+
+## Register Index
+
+Stored as:
+
+4-byte little-endian integer
+
+Example:
+
+31 01 00 00
+
+Reverse:
+
+00 00 01 31
+
+Decimal:
+
+305
+
+For ALT testing this value should remain stable.
+
+---
+
+## Timestamp
+
+4 bytes
+
+Format:
+
+Month Day Hour Reserved
+
+Example:
+
+03 02 0C 00
+
+Month = March
+
+Day = 2
+
+Hour = 12
+
+Reserved = 00
+
+Meaning:
+
+March 2 12:00
+
+---
+
+# Expected Input Format
+
+Example filenames:
+
+300001_10.txt
+300001_20.txt
+300001_30.txt
+300001_40.txt
+
+300002_10.txt
+300002_20.txt
+300002_30.txt
+300002_40.txt
+
+Device identifier:
+
+300001
+
+File identifier:
+
+10
+20
+30
+40
+
+Each file contains approximately:
+
+240 hourly records
+
+≈10 days
+
+Four files represent:
+
+≈40 days
+
+≈960 records
+
+---
+
+# Functional Requirements
+
+## FR-1 Multi-file Upload
+
+User uploads:
+
+* One file
+* Multiple files
+* Multiple devices
+
+Supported:
+
+Drag and drop.
+
+Folder upload preferred.
+
+---
+
+## FR-2 Device Grouping
+
+System must automatically group files by device.
+
+Example:
+
+300001
+
+* file10
+* file20
+* file30
+* file40
+
+300002
+
+* file10
+* file20
+* file30
+* file40
+
+No manual grouping required.
+
+---
+
+## FR-3 Chronological Reconstruction
+
+System must reconstruct a continuous timeline.
+
+Rules:
+
+Sort by timestamp.
+
+Never trust filename ordering alone.
+
+Validate against actual record timestamps.
+
+Timestamp is authoritative.
+
+---
+
+## FR-4 Record Decoding
+
+Every record must produce:
+
+timestamp
+eeprom_status
+flash_status
+battery_mv
+battery_v
+register_index
+
+Output schema:
+
+{
+"timestamp": "...",
+"eeprom": "PASS",
+"flash": "PASS",
+"battery_mv": 3680,
+"battery_v": 3.680,
+"register_index": 305
+}
+
+---
+
+## FR-5 Automatic Validation
+
+### EEPROM Validation
+
+Detect:
+
+PASS
+FAIL
+
+Count failures.
+
+---
+
+### Flash Validation
+
+Detect:
+
+PASS
+FAIL
+
+Count failures.
+
+---
+
+### Register Stability Validation
+
+Expected:
+
+No change.
+
+Example:
+
+305
+305
+305
+305
+
+Failure:
+
+305
+306
+
+Raise warning.
+
+---
+
+### Missing Record Validation
+
+Expected:
+
+24 readings/day
+
+Detect:
+
+Missing hour
+
+Missing day
+
+Duplicate hour
+
+Timestamp gaps
+
+---
+
+### Battery Sanity Validation
+
+Detect:
+
+Negative voltage
+
+Impossible values
+
+Sudden drops
+
+Sudden increases
+
+Corrupt readings
+
+---
+
+# Analytics Requirements
+
+## Battery Metrics
+
+Calculate:
+
+Start voltage
+
+End voltage
+
+Minimum voltage
+
+Maximum voltage
+
+Average voltage
+
+Voltage drop
+
+Daily voltage loss
+
+Hourly voltage loss
+
+---
+
+## Register Metrics
+
+Calculate:
+
+Unique register values
+
+Register drift
+
+Unexpected increments
+
+Unexpected decrements
+
+---
+
+## Validation Metrics
+
+Calculate:
+
+EEPROM failures
+
+Flash failures
+
+Failure timestamps
+
+Failure frequency
+
+---
+
+## Dataset Metrics
+
+Calculate:
+
+Total records
+
+Expected records
+
+Missing records
+
+Corrupt records
+
+Data completeness %
+
+---
+
+# Visualization Requirements
+
+## Chart 1
+
+Voltage vs Time
+
+X-axis:
+
+Timestamp
+
+Y-axis:
+
+Voltage
+
+Mandatory.
+
+---
+
+## Chart 2
+
+Daily Average Voltage
+
+X-axis:
+
+Date
+
+Y-axis:
+
+Average Voltage
+
+---
+
+## Chart 3
+
+Voltage Decay Trend
+
+Trendline enabled.
+
+Linear regression.
+
+---
+
+## Chart 4
+
+Register Index vs Time
+
+Expected:
+
+Flat line.
+
+Any deviation should be obvious.
+
+---
+
+## Chart 5
+
+Validation Events
+
+Timeline showing:
+
+EEPROM failures
+
+Flash failures
+
+---
+
+# Reporting Requirements
+
+## Summary Report
+
+Per device:
+
+Device ID
+
+Duration
+
+Record Count
+
+Start Voltage
+
+End Voltage
+
+Voltage Drop
+
+Average Daily Loss
+
+EEPROM Failures
+
+Flash Failures
+
+Register Drift
+
+Missing Records
+
+Health Status
+
+---
+
+## Export Formats
+
+CSV
+
+Excel
+
+PDF
+
+Phase 1:
+
+CSV only
+
+Phase 2:
+
+Excel
+
+Phase 3:
+
+PDF
+
+---
+
+# User Interface Requirements
+
+## Page 1
+
+Upload
+
+Functions:
+
+Upload files
+
+Process files
+
+View detected devices
+
+---
+
+## Page 2
+
+Device Dashboard
+
+Display:
+
+Metrics
+
+Charts
+
+Warnings
+
+Health score
+
+---
+
+## Page 3
+
+Export
+
+Generate reports.
+
+Download data.
+
+---
+
+# Project Structure
+
+alt_analyzer/
+
+├── app.py
+
+├── parser/
+
+│   ├── packet_parser.py
+│   ├── timestamp_parser.py
+│   └── voltage_parser.py
+
+├── analyzer/
+
+│   ├── battery_analysis.py
+│   ├── validation_analysis.py
+│   └── register_analysis.py
+
+├── reports/
+
+│   ├── csv_export.py
+│   ├── excel_export.py
+│   └── pdf_export.py
+
+├── visualization/
+
+│   ├── voltage_charts.py
+│   └── register_charts.py
+
+├── tests/
+
+├── sample_data/
+
+└── requirements.txt
+
+---
+
+# Development Roadmap
+
+## Phase 1
+
+Protocol Decoder
+
+Tasks:
+
+* Build packet parser
+* Decode records
+* Decode voltage
+* Decode register index
+* Decode timestamps
+
+Success criteria:
+
+Single file fully decoded.
+
+---
+
+## Phase 2
+
+Multi-file Reconstruction
+
+Tasks:
+
+* Group devices
+* Merge files
+* Sort timestamps
+* Remove duplicates
+
+Success criteria:
+
+40-day timeline created.
+
+---
+
+## Phase 3
+
+Validation Engine
+
+Tasks:
+
+* EEPROM checks
+* Flash checks
+* Register checks
+* Missing record checks
+
+Success criteria:
+
+Automatic anomaly detection.
+
+---
+
+## Phase 4
+
+Analytics
+
+Tasks:
+
+* Battery metrics
+* Register metrics
+* Device health metrics
+
+Success criteria:
+
+Automatic engineering summary.
+
+---
+
+## Phase 5
+
+Visualization
+
+Tasks:
+
+* Voltage graph
+* Register graph
+* Failure timeline
+
+Success criteria:
+
+Interactive dashboard.
+
+---
+
+## Phase 6
+
+Reporting
+
+Tasks:
+
+* CSV export
+* Excel export
+* PDF export
+
+Success criteria:
+
+One-click report generation.
+
+---
+
+# Testing Strategy
+
+## Unit Tests
+
+Test:
+
+Voltage decoding
+
+Timestamp decoding
+
+Register decoding
+
+Validation decoding
+
+Coverage target:
+
+90%+
+
+---
+
+## Integration Tests
+
+Test:
+
+Single file
+
+Four files
+
+Multiple devices
+
+Corrupted file
+
+Missing file
+
+Duplicate file
+
+---
+
+## Edge Cases
+
+Missing CC 0D
+
+Missing header
+
+Garbage bytes
+
+Partial packets
+
+Invalid timestamps
+
+Invalid voltage values
+
+Corrupted records
+
+---
+
+# Future Enhancements
+
+Not required for V1.
+
+Possible future work:
+
+* Batch report generation
+* Device comparison dashboard
+* Battery life prediction
+* Failure classification
+* Firmware version support
+* Additional Honeywell meter protocols
+
+---
+
+# Definition of Done
+
+Project is complete when:
+
+1. User uploads ALT log files.
+2. Files are grouped automatically by device.
+3. Timeline is reconstructed automatically.
+4. All records are decoded correctly.
+5. Battery trend is visualized.
+6. Register stability is verified.
+7. EEPROM/Flash failures are highlighted.
+8. Reports are generated automatically.
+9. Entire application runs locally.
+10. Startup time < 3 seconds.
+11. Processing time < 5 seconds for 100 devices.
+12. Memory usage remains below 250MB.
