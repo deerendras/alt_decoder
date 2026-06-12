@@ -117,6 +117,9 @@ def decode_file(filepath: str) -> list[DecodedRecord]:
         if packet is None:
             continue
 
+        if 0xC0 <= packet.page <= 0xCF or packet.page == 0xFC:
+            continue
+
         raw_records = split_records(packet)
         for idx, raw in enumerate(raw_records):
             decoded = decode_record(raw)

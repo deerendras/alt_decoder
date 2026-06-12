@@ -1,9 +1,9 @@
-"""CLI entry point for the ALT Log Analyzer.
+"""CLI entry point for the ALT Log Decoder.
 
 Usage:
-    python -m alt_analyzer.decode sample_data/
-    python -m alt_analyzer.decode sample_data/300001_10.txt sample_data/300001_20.txt
-    python -m alt_analyzer.decode sample_data/ --csv report.csv
+    python -m analyzer.decode sample_data/
+    python -m analyzer.decode sample_data/300001_10.txt sample_data/300001_20.txt
+    python -m analyzer.decode sample_data/ --csv report.csv
 """
 
 import argparse
@@ -12,13 +12,13 @@ import json
 import sys
 from pathlib import Path
 
-from alt_analyzer.parser.file_discovery import discover_files, group_files, parse_filename
-from alt_analyzer.analyzer.timeline_builder import build_all_timelines
+from analyzer.parser.file_discovery import discover_files, group_files, parse_filename
+from analyzer.analysis.timeline_builder import build_all_timelines
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Decode Honeywell V200HL ALT log files into structured records."
+        description="Decode smart meter ALT log files into structured records."
     )
     parser.add_argument(
         "input", nargs="+",

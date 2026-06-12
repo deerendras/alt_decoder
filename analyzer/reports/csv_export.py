@@ -7,13 +7,13 @@ import csv
 import io
 from typing import Optional
 
-from ..analyzer.device_schema import DeviceDataset
-from ..analyzer.battery_analysis import (
+from ..analysis.device_schema import DeviceDataset
+from ..analysis.battery_analysis import (
     compute_battery_metrics,
     compute_dataset_metrics,
     compute_daily_voltages,
 )
-from ..analyzer.validation_analysis import run_validations
+from ..analysis.validation_analysis import run_validations
 
 
 def export_records_csv(dataset: DeviceDataset) -> str:
@@ -52,7 +52,7 @@ def export_summary_csv(datasets: list[DeviceDataset]) -> str:
         "device_id", "record_count", "start_time", "end_time",
         "start_voltage_v", "end_voltage_v", "min_voltage_v", "max_voltage_v",
         "avg_voltage_v", "voltage_drop_mv", "daily_loss_mv",
-        "eeprom_failures", "flash_failures", "completeness_pct",
+        "eeprom_failures", "flash_failures",
         "register_stable", "validation_errors", "validation_warnings",
     ])
 
@@ -75,7 +75,6 @@ def export_summary_csv(datasets: list[DeviceDataset]) -> str:
             bm.get("daily_loss_mv", ""),
             dm.get("eeprom_failures", ""),
             dm.get("flash_failures", ""),
-            dm.get("completeness_pct", ""),
             len(set(ds.register_values)) == 1,
             len(vr.errors),
             len(vr.warnings),

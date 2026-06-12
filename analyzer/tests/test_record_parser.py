@@ -1,6 +1,6 @@
 """Tests for record_parser.py"""
 import pytest
-from alt_analyzer.parser.record_parser import decode_record
+from analyzer.parser.record_parser import decode_record
 
 
 class TestDecodeRecord:

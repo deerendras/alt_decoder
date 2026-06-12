@@ -1,6 +1,6 @@
 """Tests for voltage_parser.py"""
 import pytest
-from alt_analyzer.parser.voltage_parser import decode_voltage, is_valid_voltage
+from analyzer.parser.voltage_parser import decode_voltage, is_valid_voltage
 
 
 class TestDecodeVoltage:

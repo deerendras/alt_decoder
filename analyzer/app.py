@@ -1,4 +1,4 @@
-"""Honeywell V200HL ALT Analyzer — Streamlit App
+"""ALT Decoder — Streamlit App
 
 Three pages:
     1. Upload — drag and drop ALT log files, auto-detect devices
@@ -23,22 +23,22 @@ except ImportError:
     print("Streamlit not installed. Run: pip install streamlit", file=sys.stderr)
     sys.exit(1)
 
-from alt_analyzer.parser.file_discovery import group_files
-from alt_analyzer.analyzer.timeline_builder import build_all_timelines
-from alt_analyzer.analyzer.battery_analysis import (
+from analyzer.parser.file_discovery import group_files
+from analyzer.analysis.timeline_builder import build_all_timelines
+from analyzer.analysis.battery_analysis import (
     compute_battery_metrics,
     compute_dataset_metrics,
     compute_daily_voltages,
 )
-from alt_analyzer.analyzer.validation_analysis import run_validations
-from alt_analyzer.visualization.voltage_charts import (
+from analyzer.analysis.validation_analysis import run_validations
+from analyzer.visualization.voltage_charts import (
     build_voltage_chart,
     build_daily_avg_chart,
     build_decay_trend_chart,
     build_register_chart,
     build_validation_timeline,
 )
-from alt_analyzer.reports.csv_export import (
+from analyzer.reports.csv_export import (
     export_records_csv,
     export_summary_csv,
     export_daily_csv,
@@ -48,15 +48,17 @@ from alt_analyzer.reports.csv_export import (
     export_register_chart_csv,
 )
 
+# Note: export_voltage_chart_csv, export_decay_trend_csv, export_daily_avg_chart_csv,
+# and export_register_chart_csv are used on the Export page only.
+
 
 st.set_page_config(
-    page_title="Honeywell V200HL ALT Analyzer",
-    page_icon="🔋",
+    page_title="ALT Decoder",
     layout="wide",
 )
 
-st.title("🔋 Honeywell V200HL ALT Analyzer")
-st.caption("Decode, analyze, and export Accelerated Life Test log data from Honeywell water meters.")
+st.title("ALT Decoder")
+st.caption("Decode, analyze, and export Accelerated Life Test log data from smart meters.")
 
 
 def init_session():
@@ -100,9 +102,9 @@ def process_files(uploaded_files) -> bool:
 # Page 1 — Upload
 # ---------------------------------------------------------------------------
 def upload_page():
-    st.header("📁 Upload ALT Log Files")
+    st.header("Upload ALT Log Files")
     st.caption(
-        "Select one or more `.txt` log files from the Honeywell V200HL meter. "
+        "Select one or more `.txt` log files from the smart meter. "
         "Files are automatically grouped by the device serial number embedded in the file name "
         "(e.g. `300001_10.txt` → device **300001**, data segment **10**)."
     )
@@ -121,7 +123,7 @@ def upload_page():
 
     datasets = st.session_state.datasets
     if not datasets:
-        st.info("👆 Drag and drop your log files above to begin.")
+        st.info("Drag and drop your log files above to begin.")
         return
 
     st.divider()
@@ -130,26 +132,17 @@ def upload_page():
     cols = st.columns(4)
     for i, ds in enumerate(datasets):
         with cols[i % 4]:
-            report = run_validations(ds)
-            dm = compute_dataset_metrics(ds)
-            healthy = "✅" if report.is_healthy else "⚠️"
             st.metric(
-                f"{healthy} Device {ds.device_id}",
+                f"Device {ds.device_id}",
                 f"{ds.record_count} hourly readings",
-                f"{dm['completeness_pct']}% data complete",
             )
-
-    st.caption(
-        "**How to read this:** The number shows unique hourly voltage readings after "
-        "merging and removing overlapping data across all uploaded files for that device."
-    )
 
 
 # ---------------------------------------------------------------------------
 # Page 2 — Dashboard
 # ---------------------------------------------------------------------------
 def dashboard_page():
-    st.header("📊 Device Dashboard")
+    st.header("Device Dashboard")
 
     datasets = st.session_state.datasets
     if not datasets:
@@ -173,7 +166,6 @@ def dashboard_page():
         st.metric(
             "Total Hourly Readings",
             dm["total_records"],
-            delta=f"{dm['completeness_pct']}% data present",
             help="Number of unique hourly voltage records after merging and deduplication.",
         )
     with c2:
@@ -227,11 +219,11 @@ def dashboard_page():
 
     # ---- Validation banner ----
     if not vr_report.is_healthy:
-        st.error(f"⚠️ {len(vr_report.errors)} hardware or data-quality issue(s) detected.")
+        st.error(f"{len(vr_report.errors)} hardware or data-quality issue(s) detected.")
     elif vr_report.warnings:
         st.warning(f"{len(vr_report.warnings)} minor warning(s) — see details below.")
     else:
-        st.success("✅ All validation checks passed. No hardware faults or data issues found.")
+        st.success("All validation checks passed. No hardware faults or data issues found.")
 
     # ---- Charts ----
     st.divider()
@@ -252,7 +244,6 @@ def dashboard_page():
                 "Use the toolbar on the chart to zoom, pan, or download as a PNG image."
             )
             st.plotly_chart(chart, use_container_width=True, key="chart_voltage_time")
-            _chart_download_buttons(ds, "voltage")
 
     with tab2:
         chart = build_daily_avg_chart(ds)
@@ -264,7 +255,6 @@ def dashboard_page():
                 "The red line overlays the daily trend."
             )
             st.plotly_chart(chart, use_container_width=True, key="chart_daily_avg")
-            _chart_download_buttons(ds, "daily")
 
     with tab3:
         chart = build_decay_trend_chart(ds)
@@ -276,7 +266,11 @@ def dashboard_page():
                 "The slope tells you how fast the battery is draining per hour."
             )
             st.plotly_chart(chart, use_container_width=True, key="chart_decay")
-            _chart_download_buttons(ds, "decay")
+
+            st.divider()
+            st.subheader("Voltage Decay Calculation")
+
+            _render_decay_calculation(ds)
 
     with tab4:
         chart = build_register_chart(ds)
@@ -289,13 +283,12 @@ def dashboard_page():
                 "a possible firmware or EEPROM write issue."
             )
             st.plotly_chart(chart, use_container_width=True, key="chart_register")
-            _chart_download_buttons(ds, "register")
 
     with tab5:
         chart = build_validation_timeline(ds)
         if chart is None:
             st.success(
-                "✅ No hardware fault events detected. "
+                "No hardware fault events detected. "
                 "EEPROM and Flash memory both reported PASS across all readings."
             )
         elif isinstance(chart, str):
@@ -306,14 +299,6 @@ def dashboard_page():
                 "Flash memory failure."
             )
             st.plotly_chart(chart, use_container_width=True, key="chart_validation")
-
-    # ---- Validation detail ----
-    if vr_report.issues:
-        st.divider()
-        st.subheader("Data Quality Report")
-        for issue in vr_report.issues[:50]:
-            icon = "🔴" if issue.severity == "error" else "🟡"
-            st.text(f"{icon} [{issue.category}] {issue.message}")
 
     # ---- Records table ----
     st.divider()
@@ -334,47 +319,72 @@ def dashboard_page():
     st.dataframe(records_data, use_container_width=True, hide_index=True)
 
 
-def _chart_download_buttons(ds, chart_name: str):
-    """Render HTML and CSV download buttons for a specific chart."""
-    exporters = {
-        "voltage": (export_voltage_chart_csv, "battery_voltage_chart_data.csv",
-                     "timestamp,voltage_v"),
-        "daily": (export_daily_avg_chart_csv, "daily_average_voltage_chart_data.csv",
-                   "date,avg_voltage_v,min_v,max_v"),
-        "decay": (export_decay_trend_csv, "voltage_decay_trend_chart_data.csv",
-                   "timestamp,voltage_v,hours_elapsed,trend_voltage_v"),
-        "register": (export_register_chart_csv, "register_index_chart_data.csv",
-                      "timestamp,register_index"),
-    }
-
-    if chart_name not in exporters:
+def _render_decay_calculation(ds):
+    """Render the decay calculation methodology for the report."""
+    records = [r for r in ds.records if r.timestamp is not None and r.battery_v > 0]
+    if len(records) < 2:
+        st.info("Not enough data points for a decay calculation.")
         return
 
-    export_fn, filename, columns_hint = exporters[chart_name]
+    records.sort(key=lambda r: r.timestamp)
+    import numpy as np
 
+    x_hours = [(r.timestamp - records[0].timestamp).total_seconds() / 3600.0 for r in records]
+    y_volts = [r.battery_v for r in records]
+
+    n = len(records)
+    coeffs = np.polyfit(x_hours, y_volts, 1)
+    slope_v_per_h = coeffs[0]
+    intercept_v = coeffs[1]
+
+    x_mean = sum(x_hours) / n
+    y_mean = sum(y_volts) / n
+    ss_res = sum((y_volts[i] - (slope_v_per_h * x_hours[i] + intercept_v)) ** 2 for i in range(n))
+    ss_tot = sum((yi - y_mean) ** 2 for yi in y_volts)
+    r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+
+    total_hours = x_hours[-1]
+    total_days = total_hours / 24.0
+    start_v = y_volts[0]
+    end_v = y_volts[-1]
+    total_drop_mv = (start_v - end_v) * 1000
+    model_voltage_drop_v = abs(slope_v_per_h) * total_hours
+    model_daily_loss_mv = abs(slope_v_per_h) * 24 * 1000
+
+    st.markdown("**Linear Regression: Voltage = a×t + b**")
+    st.markdown(
+        f"- **a (slope):** {slope_v_per_h:.6f} V/hour "
+        f"= {slope_v_per_h * 1000:.4f} mV/hour "
+        f"= {model_daily_loss_mv:.2f} mV/day"
+    )
+    st.markdown(f"- **b (intercept):** {intercept_v:.3f} V (modeled starting voltage)")
+    st.markdown(f"- **R² (goodness of fit):** {r_squared:.4f}")
+    st.divider()
+    st.markdown("**Measured Values vs. Model:**")
     c1, c2 = st.columns(2)
     with c1:
-        csv_data = export_fn(ds)
-        st.download_button(
-            f"📥 Download Plot Data (CSV)",
-            data=csv_data,
-            file_name=filename,
-            mime="text/csv",
-            help=f"CSV file with columns: {columns_hint}. Open in Excel or any spreadsheet tool.",
-            use_container_width=True,
-        )
+        st.markdown(f"- Measured start voltage: **{start_v:.3f} V**")
+        st.markdown(f"- Measured end voltage: **{end_v:.3f} V**")
+        st.markdown(f"- Measured total drop: **{total_drop_mv:.0f} mV**")
     with c2:
-        st.caption(
-            "Use this CSV to recreate the chart in Excel, Python, or any other tool. "
-            "Each row is one data point from the graph above."
-        )
+        st.markdown(f"- Total duration: **{total_hours:.0f} hours ({total_days:.1f} days)**")
+        st.markdown(f"- Model voltage drop: **{model_voltage_drop_v * 1000:.0f} mV**")
+        st.markdown(f"- Model daily loss: **{model_daily_loss_mv:.2f} mV/day**")
+    st.caption(
+        "The linear regression fits a straight line through all voltage readings over time. "
+        "The slope **a** represents the average voltage decay rate. "
+        "**R²** close to 1.0 means the decay is highly linear; lower values suggest the decay "
+        "rate changes over time or the data has significant noise. "
+        "The model daily loss is the best-fit estimate — compare with the measured daily loss "
+        "from the key metrics above."
+    )
 
 
 # ---------------------------------------------------------------------------
 # Page 3 — Export
 # ---------------------------------------------------------------------------
 def export_page():
-    st.header("📥 Export Data & Reports")
+    st.header("Export Data & Reports")
 
     datasets = st.session_state.datasets
     if not datasets:
@@ -397,7 +407,7 @@ def export_page():
             all_csv += export_records_csv(ds)
 
         st.download_button(
-            "📋 Download All Records (CSV)",
+            "Download All Records (CSV)",
             data=all_csv,
             file_name="alt_all_records.csv",
             mime="text/csv",
@@ -412,7 +422,7 @@ def export_page():
         for ds in datasets:
             daily += export_daily_csv(ds)
         st.download_button(
-            "📅 Download Daily Averages (CSV)",
+            "Download Daily Averages (CSV)",
             data=daily,
             file_name="alt_daily_averages.csv",
             mime="text/csv",
@@ -426,7 +436,7 @@ def export_page():
 
     summary = export_summary_csv(datasets)
     st.download_button(
-        "📊 Download Device Summary (CSV)",
+        "Download Device Summary (CSV)",
         data=summary,
         file_name="alt_device_summary.csv",
         mime="text/csv",
@@ -447,14 +457,14 @@ def export_page():
         c1, c2 = st.columns(2)
         with c1:
             st.download_button(
-                f"📈 Voltage vs Time Data — Device {ds.device_id}",
+                f"Voltage vs Time Data — Device {ds.device_id}",
                 data=export_voltage_chart_csv(ds),
                 file_name=f"alt_{ds.device_id}_voltage_chart.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
             st.download_button(
-                f"📉 Decay Trend Data — Device {ds.device_id}",
+                f"Decay Trend Data — Device {ds.device_id}",
                 data=export_decay_trend_csv(ds),
                 file_name=f"alt_{ds.device_id}_decay_trend.csv",
                 mime="text/csv",
@@ -462,14 +472,14 @@ def export_page():
             )
         with c2:
             st.download_button(
-                f"📊 Daily Average Data — Device {ds.device_id}",
+                f"Daily Average Data — Device {ds.device_id}",
                 data=export_daily_avg_chart_csv(ds),
                 file_name=f"alt_{ds.device_id}_daily_avg.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
             st.download_button(
-                f"🔍 Register Index Data — Device {ds.device_id}",
+                f"Register Index Data — Device {ds.device_id}",
                 data=export_register_chart_csv(ds),
                 file_name=f"alt_{ds.device_id}_register_index.csv",
                 mime="text/csv",
@@ -486,13 +496,13 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
         "Go to",
-        ["📁 Upload", "📊 Dashboard", "📥 Export"],
+        ["Upload", "Dashboard", "Export"],
         key="nav",
     )
 
-    if page == "📁 Upload":
+    if page == "Upload":
         upload_page()
-    elif page == "📊 Dashboard":
+    elif page == "Dashboard":
         dashboard_page()
     else:
         export_page()

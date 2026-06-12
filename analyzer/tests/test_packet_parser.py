@@ -1,6 +1,6 @@
 """Tests for packet_parser.py"""
 import pytest
-from alt_analyzer.parser.packet_parser import (
+from analyzer.parser.packet_parser import (
     parse_packet, split_records, hex_to_bytes, extract_hex_output,
     HEADER, FOOTER, RECORD_SIZE
 )
@@ -47,7 +47,7 @@ class TestParsePacket:
 
 class TestSplitRecords:
     def test_single_record(self):
-        from alt_analyzer.parser.packet_parser import Packet
+        from analyzer.parser.packet_parser import Packet
         data = bytes([0x01, 0x01, 0x60, 0x0E, 0x00, 0x00, 0x31, 0x01, 0x00, 0x00, 0x03, 0x02, 0x0C, 0x00])
         packet = Packet(page=0x0C, raw_data=data, source_line=1)
         records = split_records(packet)
@@ -55,21 +55,21 @@ class TestSplitRecords:
         assert records[0] == data
 
     def test_multiple_records(self):
-        from alt_analyzer.parser.packet_parser import Packet
+        from analyzer.parser.packet_parser import Packet
         data = bytes([0x01, 0x01, 0x60, 0x0E, 0x00, 0x00, 0x31, 0x01, 0x00, 0x00, 0x03, 0x02, 0x0C, 0x00] * 3)
         packet = Packet(page=0x0C, raw_data=data, source_line=1)
         records = split_records(packet)
         assert len(records) == 3
 
     def test_partial_record_discarded(self):
-        from alt_analyzer.parser.packet_parser import Packet
+        from analyzer.parser.packet_parser import Packet
         data = bytes([0x01, 0x01, 0x60, 0x0E, 0x00, 0x00, 0x31, 0x01, 0x00, 0x00, 0x03, 0x02, 0x0C, 0x00, 0xFF, 0xFF])
         packet = Packet(page=0x0C, raw_data=data, source_line=1)
         records = split_records(packet)
         assert len(records) == 1
 
     def test_all_zeros_records(self):
-        from alt_analyzer.parser.packet_parser import Packet
+        from analyzer.parser.packet_parser import Packet
         data = bytes([0x00] * 14 * 5)
         packet = Packet(page=0xFC, raw_data=data, source_line=2)
         records = split_records(packet)

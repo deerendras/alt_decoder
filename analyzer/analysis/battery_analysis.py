@@ -74,21 +74,8 @@ def compute_dataset_metrics(dataset: DeviceDataset) -> dict:
     if not dataset.records:
         return _empty_dataset_metrics()
 
-    valid_ts = [r for r in dataset.records if r.timestamp is not None]
-
-    expected = 0
-    if len(valid_ts) >= 2:
-        valid_ts.sort(key=lambda r: r.timestamp)
-        hours = _hours_between(valid_ts[0].timestamp, valid_ts[-1].timestamp)
-        expected = hours + 1
-
-    completeness = (len(dataset.records) / expected * 100) if expected > 0 else 0
-
     return {
         "total_records": dataset.record_count,
-        "expected_records": expected,
-        "missing_records": max(0, expected - dataset.record_count),
-        "completeness_pct": round(completeness, 1),
         "eeprom_failures": dataset.eeprom_failures,
         "flash_failures": dataset.flash_failures,
     }
@@ -131,5 +118,4 @@ def _empty_register_metrics() -> dict:
 
 
 def _empty_dataset_metrics() -> dict:
-    return {"total_records": 0, "expected_records": 0, "missing_records": 0,
-            "completeness_pct": 0, "eeprom_failures": 0, "flash_failures": 0}
+    return {"total_records": 0, "eeprom_failures": 0, "flash_failures": 0}

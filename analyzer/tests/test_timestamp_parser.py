@@ -1,6 +1,6 @@
 """Tests for timestamp_parser.py"""
 import pytest
-from alt_analyzer.parser.timestamp_parser import decode_timestamp, is_valid_timestamp
+from analyzer.parser.timestamp_parser import decode_timestamp, is_valid_timestamp
 
 
 class TestDecodeTimestamp:

@@ -1,7 +1,7 @@
 """Plotly voltage visualization charts for ALT device datasets."""
 
-from ..analyzer.device_schema import DeviceDataset
-from ..analyzer.battery_analysis import compute_battery_metrics, compute_daily_voltages
+from ..analysis.device_schema import DeviceDataset
+from ..analysis.battery_analysis import compute_battery_metrics, compute_daily_voltages
 
 
 def build_voltage_chart(dataset: DeviceDataset):

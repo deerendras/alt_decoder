@@ -3,12 +3,11 @@
 Checks:
     - EEPROM/Flash failures
     - Register stability
-    - Missing records (expected 24/day)
     - Battery sanity (impossible values, sudden jumps)
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from .device_schema import DeviceDataset
@@ -69,10 +68,22 @@ def validate_eeprom_flash(dataset: DeviceDataset) -> list[ValidationIssue]:
                 f"EEPROM FAIL at {r.iso}",
                 timestamp=r.iso
             ))
+        elif r.eeprom.startswith("UNKNOWN"):
+            issues.append(ValidationIssue(
+                "error", "eeprom",
+                f"EEPROM corrupt ({r.eeprom}) at {r.iso}",
+                timestamp=r.iso
+            ))
         if r.flash == "FAIL":
             issues.append(ValidationIssue(
                 "error", "flash",
                 f"Flash FAIL at {r.iso}",
+                timestamp=r.iso
+            ))
+        elif r.flash.startswith("UNKNOWN"):
+            issues.append(ValidationIssue(
+                "error", "flash",
+                f"Flash corrupt ({r.flash}) at {r.iso}",
                 timestamp=r.iso
             ))
     return issues
@@ -94,43 +105,6 @@ def validate_register_stability(dataset: DeviceDataset) -> list[ValidationIssue]
                     f"Register value changed: {registers[0][0]} -> {reg_val} at {iso}",
                     timestamp=iso, value=str(reg_val)
                 ))
-    return issues
-
-
-def validate_missing_records(dataset: DeviceDataset) -> list[ValidationIssue]:
-    issues = []
-    if not dataset.records:
-        return issues
-
-    valid = [r for r in dataset.records if r.timestamp is not None]
-    if not valid:
-        return issues
-
-    valid.sort(key=lambda r: r.timestamp)
-    seen = set()
-
-    for r in valid:
-        key = (r.timestamp.year, r.month, r.day, r.hour)
-        seen.add(key)
-
-    expected_hours = 0
-    start = valid[0].timestamp
-    end = valid[-1].timestamp
-
-    current = start
-    while current <= end:
-        expected_hours += 1
-        current += timedelta(hours=1)
-
-    missing = expected_hours - len(seen)
-    if missing > 0:
-        issues.append(ValidationIssue(
-            "warning" if missing < 10 else "error",
-            "completeness",
-            f"Data completeness: {len(seen)} out of {expected_hours} expected hourly records "
-            f"({100 * len(seen) / expected_hours:.1f}%) — {missing} missing"
-        ))
-
     return issues
 
 
@@ -169,6 +143,5 @@ def run_validations(dataset: DeviceDataset) -> ValidationReport:
     report = ValidationReport(device_id=dataset.device_id)
     report.issues.extend(validate_eeprom_flash(dataset))
     report.issues.extend(validate_register_stability(dataset))
-    report.issues.extend(validate_missing_records(dataset))
     report.issues.extend(validate_battery_sanity(dataset))
     return report
