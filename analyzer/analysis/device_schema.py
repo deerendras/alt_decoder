@@ -17,6 +17,10 @@ class DeviceDataset:
     records: list[DecodedRecord] = field(default_factory=list)
     source_files: list[str] = field(default_factory=list)
 
+    def __post_init__(self):
+        if not self.device_id or not self.device_id.strip():
+            raise ValueError("device_id must be a non-empty string")
+
     @property
     def start_time(self) -> Optional[datetime]:
         if not self.records:
@@ -37,6 +41,8 @@ class DeviceDataset:
 
     @property
     def voltage_range(self) -> tuple[float, float]:
+        if not self.records:
+            return (0.0, 0.0)
         voltages = [r.battery_v for r in self.records]
         return (min(voltages), max(voltages))
 
@@ -47,11 +53,11 @@ class DeviceDataset:
 
     @property
     def eeprom_failures(self) -> int:
-        return sum(1 for r in self.records if r.eeprom == "FAIL")
+        return sum(1 for r in self.records if r.eeprom != "PASS")
 
     @property
     def flash_failures(self) -> int:
-        return sum(1 for r in self.records if r.flash == "FAIL")
+        return sum(1 for r in self.records if r.flash != "PASS")
 
     @property
     def register_values(self) -> list[int]:

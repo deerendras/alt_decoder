@@ -162,8 +162,12 @@ def build_validation_timeline(dataset: DeviceDataset):
                     if r.eeprom == "FAIL" and r.timestamp]
     flash_fails = [(r.timestamp, "Flash FAIL") for r in dataset.records
                    if r.flash == "FAIL" and r.timestamp]
+    eeprom_corrupt = [(r.timestamp, f"EEPROM {r.eeprom}") for r in dataset.records
+                      if r.eeprom.startswith("UNKNOWN") and r.timestamp]
+    flash_corrupt = [(r.timestamp, f"Flash {r.flash}") for r in dataset.records
+                     if r.flash.startswith("UNKNOWN") and r.timestamp]
 
-    if not eeprom_fails and not flash_fails:
+    if not eeprom_fails and not flash_fails and not eeprom_corrupt and not flash_corrupt:
         return None
 
     fig = go.Figure()
@@ -171,7 +175,7 @@ def build_validation_timeline(dataset: DeviceDataset):
         fig.add_trace(go.Scatter(
             x=[ts], y=[1],
             mode="markers",
-            name=label,
+            name="EEPROM FAIL",
             marker=dict(color="#d62728", size=10, symbol="x"),
             showlegend=False,
         ))
@@ -179,8 +183,24 @@ def build_validation_timeline(dataset: DeviceDataset):
         fig.add_trace(go.Scatter(
             x=[ts], y=[2],
             mode="markers",
-            name=label,
+            name="Flash FAIL",
             marker=dict(color="#ff7f0e", size=10, symbol="x"),
+            showlegend=False,
+        ))
+    for ts, label in eeprom_corrupt:
+        fig.add_trace(go.Scatter(
+            x=[ts], y=[1],
+            mode="markers",
+            name="EEPROM Corrupt",
+            marker=dict(color="#d62728", size=10, symbol="triangle-up"),
+            showlegend=False,
+        ))
+    for ts, label in flash_corrupt:
+        fig.add_trace(go.Scatter(
+            x=[ts], y=[2],
+            mode="markers",
+            name="Flash Corrupt",
+            marker=dict(color="#ff7f0e", size=10, symbol="triangle-up"),
             showlegend=False,
         ))
 

@@ -42,13 +42,18 @@ def build_timeline(file_infos: list[FileInfo], device_id: str) -> DeviceDataset:
     all_records.sort(key=_record_key)
 
     deduped: list[DecodedRecord] = []
-    seen_timestamps: set[tuple[int, int, int]] = set()
+    seen_timestamps: dict[tuple[int, int, int], int] = {}
 
     for r in all_records:
         key = (r.month, r.day, r.hour)
         if key in seen_timestamps:
+            existing_idx = seen_timestamps[key]
+            existing = deduped[existing_idx]
+            if (r.eeprom != "PASS" and r.eeprom != existing.eeprom) or \
+               (r.flash != "PASS" and r.flash != existing.flash):
+                deduped[existing_idx] = r
             continue
-        seen_timestamps.add(key)
+        seen_timestamps[key] = len(deduped)
         deduped.append(r)
 
     dataset.records = deduped
