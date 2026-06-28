@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 FILENAME_PATTERN = re.compile(r"^(\d{6})_(\d{2})\.txt$", re.IGNORECASE)
+MIN_SEGMENT = 0
+MAX_SEGMENT = 99
 
 
 @dataclass
@@ -33,10 +35,14 @@ def parse_filename(filepath: str) -> Optional[FileInfo]:
     if not match:
         return None
 
+    segment = int(match.group(2))
+    if not (MIN_SEGMENT <= segment <= MAX_SEGMENT):
+        return None
+
     return FileInfo(
         path=path,
         device_id=match.group(1),
-        segment=int(match.group(2)),
+        segment=segment,
         name=path.name,
     )
 
@@ -60,6 +66,8 @@ def discover_files(directory: str) -> dict[str, list[FileInfo]]:
         info = parse_filename(str(filepath))
         if info is None:
             continue
+        if filepath.stat().st_size == 0:
+            continue
 
         if info.device_id not in devices:
             devices[info.device_id] = []
@@ -80,6 +88,12 @@ def group_files(filepaths: list[str]) -> dict[str, list[FileInfo]]:
     devices: dict[str, list[FileInfo]] = {}
 
     for fp in filepaths:
+        path = Path(fp)
+        if not path.is_file():
+            raise FileNotFoundError(f"File not found: {fp}")
+        if path.stat().st_size == 0:
+            raise ValueError(f"File is empty: {fp}")
+
         info = parse_filename(fp)
         if info is None:
             raise ValueError(

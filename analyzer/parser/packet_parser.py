@@ -8,6 +8,7 @@ Each ReadALTTestLog line contains:
 This module strips the header/footer and splits records at exact 14-byte boundaries.
 """
 
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -17,6 +18,8 @@ FOOTER = bytes([0xCC, 0x0D])
 RECORD_SIZE = 14
 HEADER_SIZE = 4
 FOOTER_SIZE = 2
+
+_HEX_TOKEN_RE = re.compile(r"^[0-9A-Fa-f]+$")
 
 
 @dataclass
@@ -28,9 +31,20 @@ class Packet:
 
 
 def hex_to_bytes(hex_string: str) -> bytes:
-    """Convert space-separated hex string to bytes."""
+    """Convert space-separated hex string to bytes.
+
+    Raises ValueError for invalid hex characters, empty input, or odd-length hex.
+    """
+    if not hex_string.strip():
+        raise ValueError("Hex string is empty")
     hex_parts = hex_string.strip().split()
-    return bytes.fromhex("".join(hex_parts))
+    for token in hex_parts:
+        if not _HEX_TOKEN_RE.match(token):
+            raise ValueError(f"Invalid hex byte: {token!r}")
+    joined = "".join(hex_parts)
+    if len(joined) % 2 != 0:
+        raise ValueError(f"Odd number of hex nibbles in: {hex_string!r}")
+    return bytes.fromhex(joined)
 
 
 def extract_hex_output(line: str) -> Optional[str]:
@@ -42,7 +56,10 @@ def extract_hex_output(line: str) -> Optional[str]:
     idx = line.find(marker)
     if idx == -1:
         return None
-    return line[idx + len(marker):].strip()
+    output = line[idx + len(marker):].strip()
+    if not output:
+        return None
+    return output
 
 
 def parse_packet(line: str, line_number: int) -> Optional[Packet]:
@@ -75,6 +92,12 @@ def parse_packet(line: str, line_number: int) -> Optional[Packet]:
 
     # Extract page from header (byte 3, after 4F A9 BB)
     page = raw[3]
+    if page > 0xFC:
+        return None
+
+    # Validate footer bytes
+    if raw[-FOOTER_SIZE:] != FOOTER:
+        return None
 
     # Strip header and footer
     payload = raw[HEADER_SIZE:len(raw) - FOOTER_SIZE]

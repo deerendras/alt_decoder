@@ -10,6 +10,7 @@ Record structure (14 bytes):
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from .packet_parser import parse_packet, split_records, hex_to_bytes
@@ -17,6 +18,7 @@ from .timestamp_parser import decode_timestamp, is_valid_timestamp
 from .voltage_parser import decode_voltage, is_valid_voltage
 
 RECORD_SIZE = 14
+MAX_REGISTER_INDEX = 0xFFFF
 
 
 @dataclass
@@ -87,6 +89,8 @@ def decode_record(raw: bytes) -> Optional[DecodedRecord]:
     register_bytes = raw[6:10]
     import struct
     record.register_index = struct.unpack("<I", register_bytes)[0]
+    if record.register_index > MAX_REGISTER_INDEX:
+        return None
 
     ts_result = decode_timestamp(raw[10:14])
     record.month = ts_result["month"]
@@ -107,10 +111,21 @@ def decode_file(filepath: str) -> list[DecodedRecord]:
     Returns:
         List of DecodedRecord objects, ordered by appearance in the file.
     """
+    fp = Path(filepath)
+    if not fp.exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+    if not fp.is_file():
+        raise IsADirectoryError(f"Expected a file, got directory: {filepath}")
+    if fp.stat().st_size == 0:
+        raise ValueError(f"File is empty: {filepath}")
+
     records = []
 
     with open(filepath, "r", encoding="utf-8") as f:
         lines = f.readlines()
+
+    if not lines:
+        return records
 
     for line_num, line in enumerate(lines, start=1):
         packet = parse_packet(line, line_num)

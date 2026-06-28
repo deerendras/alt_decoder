@@ -27,7 +27,7 @@ def decode_timestamp(timestamp_bytes: bytes) -> dict:
     dt = None
     iso_string = None
 
-    if 1 <= month <= 12 and 1 <= day <= 31 and 0 <= hour <= 23:
+    if reserved == 0x00 and 1 <= month <= 12 and 1 <= day <= 31 and 0 <= hour <= 23:
         try:
             dt = datetime(2026, month, day, hour)
             iso_string = dt.isoformat()
@@ -51,4 +51,7 @@ def is_valid_timestamp(timestamp_bytes: bytes) -> bool:
     month = timestamp_bytes[0]
     day = timestamp_bytes[1]
     hour = timestamp_bytes[2]
+    reserved = timestamp_bytes[3]
+    if reserved != 0x00:
+        return False
     return 1 <= month <= 12 and 1 <= day <= 31 and 0 <= hour <= 23
