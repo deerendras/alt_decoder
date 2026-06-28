@@ -17,6 +17,9 @@ _PROJECT_ROOT = _APP_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+MAX_FILE_SIZE_MB = 50
+MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
+
 try:
     import streamlit as st
 except ImportError:
@@ -75,11 +78,30 @@ def process_files(uploaded_files) -> bool:
     if not uploaded_files:
         return False
 
+    for uf in uploaded_files:
+        if uf.size > MAX_FILE_SIZE:
+            st.error(f"File '{uf.name}' exceeds {MAX_FILE_SIZE_MB}MB size limit ({uf.size / 1024 / 1024:.1f}MB)")
+            return False
+        if uf.size == 0:
+            st.error(f"File '{uf.name}' is empty")
+            return False
+        if not uf.name.lower().endswith(".txt"):
+            st.error(f"File '{uf.name}' is not a .txt file")
+            return False
+
     with tempfile.TemporaryDirectory() as tmpdir:
         saved = []
         for uf in uploaded_files:
+            content = uf.getvalue()
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                st.error(f"File '{uf.name}' is not valid UTF-8 text")
+                return False
+            if "ReadALTTestLog" not in text:
+                st.warning(f"File '{uf.name}' does not contain ReadALTTestLog entries")
             fpath = Path(tmpdir) / uf.name
-            fpath.write_bytes(uf.getvalue())
+            fpath.write_bytes(content)
             saved.append(str(fpath))
 
         try:

@@ -15,6 +15,9 @@ from pathlib import Path
 from analyzer.parser.file_discovery import discover_files, group_files, parse_filename
 from analyzer.analysis.timeline_builder import build_all_timelines
 
+MAX_FILE_SIZE_MB = 100
+MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -34,11 +37,24 @@ def main():
     devices = {}
 
     for p in paths:
+        if not p.exists():
+            print(f"Warning: '{p}' does not exist, skipping", file=sys.stderr)
+            continue
         if p.is_dir():
             found = discover_files(str(p))
             for dev_id, files in found.items():
                 devices.setdefault(dev_id, []).extend(files)
         elif p.is_file():
+            if p.suffix.lower() != ".txt":
+                print(f"Warning: '{p.name}' is not a .txt file, skipping", file=sys.stderr)
+                continue
+            if p.stat().st_size > MAX_FILE_SIZE:
+                print(f"Warning: '{p.name}' exceeds {MAX_FILE_SIZE_MB}MB limit, skipping",
+                      file=sys.stderr)
+                continue
+            if p.stat().st_size == 0:
+                print(f"Warning: '{p.name}' is empty, skipping", file=sys.stderr)
+                continue
             info = parse_filename(str(p))
             if info is None:
                 print(f"Warning: '{p.name}' doesn't match expected pattern, skipping",
@@ -46,7 +62,7 @@ def main():
                 continue
             devices.setdefault(info.device_id, []).append(info)
         else:
-            print(f"Warning: '{p}' not found, skipping", file=sys.stderr)
+            print(f"Warning: '{p}' is not a file or directory, skipping", file=sys.stderr)
 
     if not devices:
         print("Error: No valid ALT log files found.", file=sys.stderr)
@@ -89,6 +105,10 @@ def main():
                 print(f"  ... and {len(ds.records) - 5} more records")
 
     if args.csv and all_records:
+        csv_path = Path(args.csv)
+        if csv_path.exists() and csv_path.is_dir():
+            print(f"Error: --csv path is a directory: {args.csv}", file=sys.stderr)
+            sys.exit(1)
         with open(args.csv, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "device_id", "timestamp", "eeprom", "flash", "battery_mv",
@@ -103,6 +123,10 @@ def main():
         print(f"\nExported to {args.csv}")
 
     if args.json and all_records:
+        json_path = Path(args.json)
+        if json_path.exists() and json_path.is_dir():
+            print(f"Error: --json path is a directory: {args.json}", file=sys.stderr)
+            sys.exit(1)
         output = {ds.device_id: ds.summary() for ds in datasets}
         output["_records"] = []
         for ds in datasets:
